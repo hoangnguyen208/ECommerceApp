@@ -3,5 +3,6 @@ bin
 appsettings.json
 original
 *.db
+*.rdb
 .vs
 .vscode
