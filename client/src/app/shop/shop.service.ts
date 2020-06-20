@@ -1,52 +1,101 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { IPagination } from '../shared/models/pagination';
+import { IPagination, Pagination } from '../shared/models/pagination';
 import { IBrand } from '../shared/models/brands';
 import { IProductType } from '../shared/models/productType';
 import { map } from 'rxjs/operators';
 import { ShopParams } from '../shared/models/shopParams';
 import { IProduct } from '../shared/models/product';
+import { of } from 'rxjs/internal/observable/of';
 
 @Injectable({
   providedIn: 'root'
 })
 export class ShopService {
   baseUrl = 'https://localhost:5001/api/';
+  products: IProduct[] = [];
+  brands: IBrand[] = [];
+  types: IProductType[] = [];
+  pagination = new Pagination();
+  shopParams = new ShopParams();
 
   constructor(private http: HttpClient) { }
 
-  getProducts(shopParams?: ShopParams) {
+  getProducts(useCache: boolean) {
+    if (!useCache) {
+      this.products = [];
+    }
+
+    if (this.products.length && useCache) {
+      const pagesReceived = Math.ceil(this.products.length / this.shopParams.pageSize);
+      if (this.shopParams.pageNumber <= pagesReceived) {
+        // tslint:disable-next-line: max-line-length
+        this.pagination.data = this.products.slice((this.shopParams.pageNumber - 1) * this.shopParams.pageSize, this.shopParams.pageNumber * this.shopParams.pageSize);
+        return of(this.pagination);
+      }
+    }
+
     let params = new HttpParams();
-    if (shopParams.brandId !== 0) {
-      params = params.append('brandId', shopParams.brandId.toString());
+    if (this.shopParams.brandId !== 0) {
+      params = params.append('brandId', this.shopParams.brandId.toString());
     }
-    if (shopParams.typeId !== 0) {
-      params = params.append('typeId', shopParams.typeId.toString());
+    if (this.shopParams.typeId !== 0) {
+      params = params.append('typeId', this.shopParams.typeId.toString());
     }
-    if (shopParams.search) {
-      params = params.append('search', shopParams.search);
+    if (this.shopParams.search) {
+      params = params.append('search', this.shopParams.search);
     }
-    params = params.append('sort', shopParams.sort);
-    params = params.append('pageIndex', shopParams.pageNumber.toString());
-    params = params.append('pageSize', shopParams.pageSize.toString());
+    params = params.append('sort', this.shopParams.sort);
+    params = params.append('pageIndex', this.shopParams.pageNumber.toString());
+    params = params.append('pageSize', this.shopParams.pageSize.toString());
 
     return this.http.get<IPagination>(this.baseUrl + 'products', {observe: 'response', params})
       .pipe(
         map(res => {
-          return res.body;
+          this.products = [...this.products, ...res.body.data];
+          this.pagination = res.body;
+          return this.pagination;
         })
       );
   }
 
+  setShopParams(params: ShopParams) {
+    this.shopParams = params;
+  }
+
+  getShopParams() {
+    return this.shopParams;
+  }
+
   getBrands() {
-    return this.http.get<IBrand[]>(this.baseUrl + 'products/brands');
+    if (this.brands.length) {
+      return of(this.brands);
+    }
+    return this.http.get<IBrand[]>(this.baseUrl + 'products/brands').pipe(
+      map(res => {
+        this.brands = res;
+        return res;
+      })
+    );
   }
 
   getTypes() {
-    return this.http.get<IProductType[]>(this.baseUrl + 'products/types');
+    if (this.types.length) {
+      return of(this.types);
+    }
+    return this.http.get<IProductType[]>(this.baseUrl + 'products/types').pipe(
+      map(res => {
+        this.types = res;
+        return res;
+      })
+    );
   }
 
   getProduct(id: number) {
+    const product = this.products.find(p => p.id === id);
+    if (product) {
+      return of(product);
+    }
     return this.http.get<IProduct>(this.baseUrl + 'products/' + id);
   }
 }
